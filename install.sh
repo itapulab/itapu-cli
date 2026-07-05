@@ -28,9 +28,15 @@ command -v curl >/dev/null 2>&1 || err "curl is required"
 command -v tar  >/dev/null 2>&1 || err "tar is required"
 
 printf 'Fetching the latest release...\n'
-tag=$(curl -fsSL "https://api.github.com/repos/$REPO/releases/latest" |
-  grep '"tag_name"' | head -1 | cut -d '"' -f 4)
-[ -n "$tag" ] || err "could not determine the latest release"
+# Resolve the tag from the /releases/latest redirect — unlike the GitHub
+# API, this is not rate-limited for anonymous clients.
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' \
+  "https://github.com/$REPO/releases/latest") || tag=""
+tag=${tag##*/}
+case "$tag" in
+  v[0-9]*) ;;
+  *) err "could not determine the latest release" ;;
+esac
 version=${tag#v}
 
 url="https://github.com/$REPO/releases/download/$tag/itapu_${version}_${os}_${arch}.tar.gz"
