@@ -1,15 +1,28 @@
 # itapu CLI
 
-Command-line interface for the Itapu secrets platform. Implements the
-`api/v1` contract described in [`itapu/docs/cli-integration.md`](../itapu/docs/cli-integration.md).
+Command-line interface for the Itapu secrets platform.
 
-## Build
+## Install
+
+macOS / Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/itapulab/itapu-cli/main/install.sh | sh
+```
+
+This installs the latest release to `~/.local/bin/itapu` (set
+`ITAPU_INSTALL_DIR` to change it). Prebuilt binaries for every platform,
+Windows included, are on the [releases page](https://github.com/itapulab/itapu-cli/releases).
+
+## Build from source
 
 ```sh
 go build -o itapu .
 ```
 
-Pure standard library — no external dependencies.
+Pure standard library — no external dependencies. Releases are
+cross-compiled and published by [GoReleaser](https://goreleaser.com) via
+GitHub Actions on every `v*` tag.
 
 ## Usage
 
