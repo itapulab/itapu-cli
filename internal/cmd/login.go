@@ -24,7 +24,10 @@ func Login(args []string) error {
 	if err != nil {
 		return err
 	}
-	baseURL := config.ResolveBaseURL(*baseURLFlag, cfg)
+	// Login establishes which server the CLI is bound to, so the stored
+	// baseUrl must not be a fallback here: omitting the flag means the
+	// default (or $ITAPU_BASE_URL), not whatever the last login used.
+	baseURL := config.ResolveBaseURL(*baseURLFlag, nil)
 
 	client := api.New(baseURL, "")
 	start, err := client.LoginStart()
@@ -60,6 +63,12 @@ func Login(args []string) error {
 
 	switch status {
 	case "approved":
+		if oldURL := config.ResolveBaseURL("", cfg); oldURL != baseURL {
+			// The secrets token was minted by the previous server and is
+			// invalid on the new one; drop it so `run` asks for `init` again.
+			cfg.SecretsToken = ""
+			cfg.SecretsTokenExpiresAt = time.Time{}
+		}
 		cfg.BaseURL = baseURL
 		cfg.AccountToken = approved.AccountToken
 		cfg.AccountTokenExpiresAt = approved.ExpiresAt
