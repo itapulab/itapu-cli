@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// Client talks to the Itapu web app origin (e.g. https://app.itapu.dev).
+// Client talks to the Itapu web app origin (e.g. https://itapu.itapulab.app).
 type Client struct {
 	BaseURL string
 	Token   string

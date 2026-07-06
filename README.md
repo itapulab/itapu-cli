@@ -33,16 +33,16 @@ itapu init [--env=<slug>]  # grant this repo an environment (default: dev),
 itapu run -- pnpm dev      # fetch secrets and run the command with them injected
 ```
 
-The API origin defaults to `https://app.itapu.dev`; override with
+The API origin defaults to `https://itapu.itapulab.app`; override with
 `itapu login --base-url=<origin>` or the `ITAPU_BASE_URL` environment
 variable (useful for local development against `http://localhost:3000`).
 
 ## Where things are stored
 
-| File | Contents | Commit? |
-| --- | --- | --- |
-| `~/.config/itapu/config.json` (mode `0600`) | account + secrets tokens, base URL | never |
-| `.itapu.json` in the repo | org/project/environment ids only, no tokens | safe |
+| File                                        | Contents                                    | Commit? |
+| ------------------------------------------- | ------------------------------------------- | ------- |
+| `~/.config/itapu/config.json` (mode `0600`) | account + secrets tokens, base URL          | never   |
+| `.itapu.json` in the repo                   | org/project/environment ids only, no tokens | safe    |
 
 Secret values are never written to disk — `itapu run` fetches them per
 invocation and injects them into the child process environment (secrets win

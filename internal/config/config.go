@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const DefaultBaseURL = "https://app.itapu.dev"
+const DefaultBaseURL = "https://itapu.vercel.app"
 
 // ---- user-level store ----
 
