@@ -2,10 +2,13 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/itapulab/itapu-cli/internal/cmd"
+	"github.com/itapulab/itapu-cli/internal/prompt"
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
 var version = "0.1.0"
@@ -51,7 +54,11 @@ func main() {
 	}
 
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "itapu:", err)
+		if errors.Is(err, prompt.ErrCancelled) {
+			fmt.Fprintln(os.Stderr, ui.Faint("Cancelled."))
+			os.Exit(130)
+		}
+		fmt.Fprintln(os.Stderr, ui.Error(err.Error()))
 		os.Exit(1)
 	}
 }

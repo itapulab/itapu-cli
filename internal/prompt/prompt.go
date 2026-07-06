@@ -1,13 +1,81 @@
-// Package prompt provides minimal interactive terminal prompts.
+// Package prompt provides the CLI's interactive prompts: arrow-key
+// navigation via huh in a terminal, with a plain numbered-list fallback
+// for non-interactive stdin (pipes, CI).
 package prompt
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/huh"
+
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
+
+// ErrCancelled is returned when the user aborts a prompt (Ctrl-C / Esc).
+var ErrCancelled = errors.New("cancelled")
+
+// Select shows an arrow-key list and returns the chosen index.
+func Select(label string, options []string) (int, error) {
+	if !ui.Interactive() {
+		return selectFallback(label, options)
+	}
+	var idx int
+	opts := make([]huh.Option[int], len(options))
+	for i, o := range options {
+		opts[i] = huh.NewOption(o, i)
+	}
+	err := huh.NewSelect[int]().
+		Title(label).
+		Options(opts...).
+		Value(&idx).
+		Run()
+	if err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return 0, ErrCancelled
+		}
+		return 0, err
+	}
+	return idx, nil
+}
+
+// MultiSelect shows a checklist (space toggles, enter confirms) and
+// returns the chosen indexes. At least one selection is required.
+func MultiSelect(label string, options []string) ([]int, error) {
+	if !ui.Interactive() {
+		return multiSelectFallback(label, options)
+	}
+	var picks []int
+	opts := make([]huh.Option[int], len(options))
+	for i, o := range options {
+		opts[i] = huh.NewOption(o, i)
+	}
+	err := huh.NewMultiSelect[int]().
+		Title(label).
+		Description("space to toggle, enter to confirm").
+		Options(opts...).
+		Validate(func(v []int) error {
+			if len(v) == 0 {
+				return errors.New("select at least one project")
+			}
+			return nil
+		}).
+		Value(&picks).
+		Run()
+	if err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return nil, ErrCancelled
+		}
+		return nil, err
+	}
+	return picks, nil
+}
+
+// ---- non-TTY fallback ----
 
 var stdin = bufio.NewReader(os.Stdin)
 
@@ -19,8 +87,7 @@ func readLine() (string, error) {
 	return strings.TrimSpace(line), nil
 }
 
-// Select prints a numbered list and returns the chosen index.
-func Select(label string, options []string) (int, error) {
+func selectFallback(label string, options []string) (int, error) {
 	fmt.Fprintf(os.Stderr, "\n%s\n", label)
 	for i, opt := range options {
 		fmt.Fprintf(os.Stderr, "  %2d) %s\n", i+1, opt)
@@ -39,9 +106,7 @@ func Select(label string, options []string) (int, error) {
 	}
 }
 
-// MultiSelect prints a numbered list and returns the chosen indexes.
-// Accepts comma/space separated numbers or "all".
-func MultiSelect(label string, options []string) ([]int, error) {
+func multiSelectFallback(label string, options []string) ([]int, error) {
 	fmt.Fprintf(os.Stderr, "\n%s\n", label)
 	for i, opt := range options {
 		fmt.Fprintf(os.Stderr, "  %2d) %s\n", i+1, opt)

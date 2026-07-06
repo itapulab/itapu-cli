@@ -12,6 +12,7 @@ import (
 	"github.com/itapulab/itapu-cli/internal/api"
 	"github.com/itapulab/itapu-cli/internal/config"
 	"github.com/itapulab/itapu-cli/internal/prompt"
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
 // Init implements `itapu init [--env=<slug>]`: scopes the CLI to one org,
@@ -56,7 +57,7 @@ func Init(args []string) error {
 		}
 		org = &ws.Organizations[idx]
 	} else {
-		info("Organization: %s (%s)", org.Name, org.Role)
+		info("Organization: %s %s", ui.Strong(org.Name), ui.Faint("("+org.Role+")"))
 	}
 
 	// A project qualifies when it has the resolved environment slug (the
@@ -78,8 +79,8 @@ func Init(args []string) error {
 		}
 	}
 	if len(excluded) > 0 {
-		info("\n⚠ Skipping projects without access to a %q environment: %s",
-			*envSlug, strings.Join(excluded, ", "))
+		info("\n" + ui.Warn(fmt.Sprintf("Skipping projects without access to a %q environment: %s",
+			*envSlug, strings.Join(excluded, ", "))))
 	}
 	if len(qualifying) == 0 {
 		return fmt.Errorf("no project in %s has a %q environment you can read", org.Name, *envSlug)
@@ -87,7 +88,7 @@ func Init(args []string) error {
 
 	var picks []int
 	if len(qualifying) == 1 {
-		info("Project: %s", qualifying[0].Name)
+		info("Project: %s", ui.Strong(qualifying[0].Name))
 		picks = []int{0}
 	} else {
 		labels := make([]string, len(qualifying))
@@ -161,13 +162,14 @@ func Init(args []string) error {
 			return err
 		}
 
-		info("\n✔ Authorized. Wrote %s", path)
+		info("\n" + ui.Success("Authorized. Wrote "+path))
 		for _, g := range approved.Grants {
-			info("    %s → %s (%s)", g.ProjectName, g.EnvironmentName, g.EnvironmentSlug)
+			info(ui.Grant(g.ProjectName, fmt.Sprintf("%s (%s)", g.EnvironmentName, g.EnvironmentSlug)))
 		}
-		info("\nSecrets token valid until %s. Note: this revoked any previous", approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))
-		info("secrets token of yours (other repos may need `itapu init` again).")
-		info("Run `itapu run -- <command>` to start your app with secrets injected.")
+		info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s. Note: this revoked any previous",
+			approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))))
+		info(ui.Faint("secrets token of yours (other repos may need `itapu init` again)."))
+		info("Run " + ui.Strong("itapu run -- <command>") + " to start your app with secrets injected.")
 		return nil
 	case "denied":
 		return errors.New("authorization denied in the browser (or your access to a requested environment was revoked)")

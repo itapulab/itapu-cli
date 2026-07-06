@@ -7,9 +7,12 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/huh/spinner"
+
 	"github.com/itapulab/itapu-cli/internal/api"
 	"github.com/itapulab/itapu-cli/internal/browser"
 	"github.com/itapulab/itapu-cli/internal/config"
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
 func info(format string, a ...any) {
@@ -19,32 +22,49 @@ func info(format string, a ...any) {
 // openBrowser prints the URL (always, for SSH/headless use) and tries to
 // open it in the default browser.
 func openBrowser(url string) {
-	info("\nOpen this URL in your browser:\n\n    %s\n", url)
+	info("\nOpen this URL in your browser:\n\n    %s\n", ui.URL(url))
 	if err := browser.Open(url); err == nil {
-		info("(a browser window should have opened automatically)")
+		info(ui.Faint("(a browser window should have opened automatically)"))
 	}
 }
 
 // waitApproval polls fn every interval until the deadline, returning the
-// first non-pending status.
+// first non-pending status. In a terminal it shows a spinner while polling.
 func waitApproval(interval time.Duration, deadline time.Time, fn func() (string, error)) (string, error) {
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
-	info("Waiting for approval (expires %s)...", deadline.Local().Format(time.Kitchen))
-	for {
-		if time.Now().After(deadline) {
-			return "expired", nil
+	poll := func() (string, error) {
+		for {
+			if time.Now().After(deadline) {
+				return "expired", nil
+			}
+			status, err := fn()
+			if err != nil {
+				return "", err
+			}
+			if status != "pending" {
+				return status, nil
+			}
+			time.Sleep(interval)
 		}
-		status, err := fn()
-		if err != nil {
-			return "", err
-		}
-		if status != "pending" {
-			return status, nil
-		}
-		time.Sleep(interval)
 	}
+
+	if !ui.Interactive() {
+		info("Waiting for approval (expires %s)...", deadline.Local().Format(time.Kitchen))
+		return poll()
+	}
+
+	var status string
+	var pollErr error
+	title := fmt.Sprintf("Waiting for approval in the browser (expires %s)...",
+		deadline.Local().Format(time.Kitchen))
+	if err := spinner.New().Title(title).Output(os.Stderr).Action(func() {
+		status, pollErr = poll()
+	}).Run(); err != nil {
+		return "", err
+	}
+	return status, pollErr
 }
 
 // requireAccountToken returns the stored account token or an actionable error.

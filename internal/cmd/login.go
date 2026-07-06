@@ -8,6 +8,7 @@ import (
 
 	"github.com/itapulab/itapu-cli/internal/api"
 	"github.com/itapulab/itapu-cli/internal/config"
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
 // Login implements `itapu login`: device-code flow that stores a 6-day
@@ -34,10 +35,8 @@ func Login(args []string) error {
 	// The user compares this code with the one shown in the browser before
 	// approving — display it prominently.
 	info("\nYour verification code is:\n")
-	info("    ┌──────────────┐")
-	info("    │  %-10s  │", start.UserCode)
-	info("    └──────────────┘")
-	info("\nConfirm it matches the code shown in the browser before approving.")
+	info(ui.CodeBox(start.UserCode))
+	info("\n" + ui.Faint("Confirm it matches the code shown in the browser before approving."))
 	openBrowser(start.VerificationUrl)
 
 	interval := time.Duration(start.PollIntervalSeconds) * time.Second
@@ -67,8 +66,8 @@ func Login(args []string) error {
 		if err := config.SaveUser(cfg); err != nil {
 			return fmt.Errorf("logged in, but failed to save credentials: %w", err)
 		}
-		info("\n✔ Logged in. Your session is valid until %s.",
-			approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))
+		info("\n" + ui.Success(fmt.Sprintf("Logged in. Your session is valid until %s.",
+			approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))))
 		return nil
 	case "denied":
 		return errors.New("login denied in the browser")

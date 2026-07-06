@@ -15,6 +15,7 @@ import (
 
 	"github.com/itapulab/itapu-cli/internal/api"
 	"github.com/itapulab/itapu-cli/internal/config"
+	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
 // Run implements `itapu run [--project=<name|id>] -- <command>`: fetches the
@@ -86,8 +87,8 @@ func Run(args []string) (int, error) {
 		return 1, err
 	}
 
-	info("itapu: injecting %d secrets from %s/%s (%s)",
-		len(resp.Secrets), resp.Environment.ProjectName, resp.Environment.Slug, resp.Environment.Name)
+	info(ui.Faint(fmt.Sprintf("itapu: injecting %d secrets from %s/%s (%s)",
+		len(resp.Secrets), resp.Environment.ProjectName, resp.Environment.Slug, resp.Environment.Name)))
 
 	return spawn(childArgs, resp.Secrets)
 }
