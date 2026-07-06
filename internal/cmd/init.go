@@ -18,7 +18,8 @@ import (
 // Init implements `itapu init [--env=<slug>]`: scopes the CLI to one org,
 // one or more projects and a single environment, and stores an 8-hour
 // secrets token in the user-level config (the token never touches
-// .itapu.json, which is safe to commit).
+// .itapu.json, which is per-developer state and gets gitignored
+// automatically).
 func Init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	envSlug := fs.String("env", "dev", "environment slug (never prompted)")
@@ -143,7 +144,9 @@ func Init(args []string) error {
 			return fmt.Errorf("authorized, but failed to save the secrets token: %w", err)
 		}
 
-		// .itapu.json holds only ids/names — safe to commit.
+		// .itapu.json holds only ids/names (no tokens), but each init
+		// rewrites it with this developer's selection, so it stays
+		// per-developer and out of git.
 		proj := &config.ProjectConfig{OrgID: org.ID, EnvironmentSlug: *envSlug}
 		for _, g := range approved.Grants {
 			proj.Projects = append(proj.Projects, config.ProjectGrant{
@@ -165,6 +168,13 @@ func Init(args []string) error {
 		info("\n" + ui.Success("Authorized. Wrote "+path))
 		for _, g := range approved.Grants {
 			info(ui.Grant(g.ProjectName, fmt.Sprintf("%s (%s)", g.EnvironmentName, g.EnvironmentSlug)))
+		}
+		switch added, err := ensureGitignored(cwd); {
+		case err != nil:
+			info(ui.Warn(fmt.Sprintf("Couldn't update .gitignore (%v) — add %s to it yourself; the file is per-developer.",
+				err, config.ProjectConfigName)))
+		case added:
+			info("Added " + ui.Strong(config.ProjectConfigName) + " to .gitignore " + ui.Faint("(per-developer file)"))
 		}
 		info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s. Note: this revoked any previous",
 			approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))))

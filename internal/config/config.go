@@ -2,8 +2,9 @@
 //
 //   - the user-level store (~/.config/itapu/config.json, mode 0600) holding
 //     the account and secrets tokens — never committed;
-//   - the project-level config (.itapu.json, safe to commit) holding only
-//     org/project/environment ids, no tokens.
+//   - the project-level config (.itapu.json) holding only org/project/
+//     environment ids, no tokens; per-developer, so `itapu init` adds it
+//     to .gitignore.
 package config
 
 import (

@@ -1,1 +1,2 @@
+# Local build output (`make build`); `make install` goes to ~/.local/bin.
 /itapu

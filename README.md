@@ -17,12 +17,15 @@ Windows included, are on the [releases page](https://github.com/itapulab/itapu-c
 ## Build from source
 
 ```sh
-go build -o itapu .
+make build     # ./itapu in the repo (or: go build -o itapu .)
+make install   # build straight into ~/.local/bin (override: ITAPU_INSTALL_DIR)
+make test      # run the test suite
 ```
 
-Pure standard library — no external dependencies. Releases are
-cross-compiled and published by [GoReleaser](https://goreleaser.com) via
-GitHub Actions on every `v*` tag.
+Requires Go 1.26+. Interactive prompts and styling come from the
+[Charm](https://charm.sh) libraries (`huh`, `lipgloss`); everything else is
+standard library. Releases are cross-compiled and published by
+[GoReleaser](https://goreleaser.com) via GitHub Actions on every `v*` tag.
 
 ## Usage
 
@@ -39,10 +42,15 @@ variable (useful for local development against `http://localhost:3000`).
 
 ## Where things are stored
 
-| File                                        | Contents                                    | Commit? |
-| ------------------------------------------- | ------------------------------------------- | ------- |
-| `~/.config/itapu/config.json` (mode `0600`) | account + secrets tokens, base URL          | never   |
-| `.itapu.json` in the repo                   | org/project/environment ids only, no tokens | safe    |
+| File                                        | Contents                                    | Commit?                    |
+| ------------------------------------------- | ------------------------------------------- | -------------------------- |
+| `~/.config/itapu/config.json` (mode `0600`) | account + secrets tokens, base URL          | never                      |
+| `.itapu.json` in the repo                   | org/project/environment ids only, no tokens | no — per-developer, `itapu init` gitignores it |
+
+`.itapu.json` contains no secrets, but every `itapu init` rewrites it with
+that developer's own project/environment selection, so it is per-developer
+state: `itapu init` appends it to your `.gitignore` automatically (when run
+inside a git repository and not already ignored).
 
 Secret values are never written to disk — `itapu run` fetches them per
 invocation and injects them into the child process environment (secrets win
