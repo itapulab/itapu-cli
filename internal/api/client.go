@@ -178,12 +178,19 @@ type AuthRequestResponse struct {
 	PollIntervalSeconds int       `json:"pollIntervalSeconds"`
 }
 
-func (c *Client) CreateAuthRequest(orgID string, projectIDs []string, environmentSlug string) (*AuthRequestResponse, error) {
+// CreateAuthRequest asks for a secrets token covering one project. When
+// extendToken holds a still-valid secrets token, the server unions its
+// grants into the requested token (the approval page shows the full
+// resulting scope); minting revokes all previous tokens either way.
+func (c *Client) CreateAuthRequest(orgID, projectID, environmentSlug, extendToken string) (*AuthRequestResponse, error) {
 	var out AuthRequestResponse
 	body := map[string]any{
 		"orgId":           orgID,
-		"projectIds":      projectIDs,
+		"projectIds":      []string{projectID},
 		"environmentSlug": environmentSlug,
+	}
+	if extendToken != "" {
+		body["extendToken"] = extendToken
 	}
 	if err := c.do("POST", "/api/v1/cli/auth-requests", body, &out); err != nil {
 		return nil, err
@@ -192,6 +199,7 @@ func (c *Client) CreateAuthRequest(orgID string, projectIDs []string, environmen
 }
 
 type Grant struct {
+	OrgID           string `json:"orgId,omitempty"`
 	ProjectID       string `json:"projectId"`
 	ProjectName     string `json:"projectName"`
 	EnvironmentID   string `json:"environmentId"`

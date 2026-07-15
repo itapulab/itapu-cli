@@ -63,7 +63,7 @@ daily update hint.
 
 ```sh
 itapu login                # device-code login, stores a 6-day account token
-itapu init [--env=<slug>]  # grant this repo an environment (default: dev),
+itapu init [--env=<slug>]  # link this repo to one project + environment (default: dev),
                            # stores an 8-hour secrets token and writes .itapu.json
 itapu run -- pnpm dev      # fetch secrets and run the command with them injected
 itapu update               # self-update to the latest release
@@ -93,8 +93,13 @@ over inherited variables).
 
 Notes from the API contract:
 
-- Claiming a new secrets token (`itapu init`) revokes all your previous
-  ones — other repos on other machines will need `itapu init` again.
+- There is only ever one valid secrets token per user. Claiming a new one
+  (`itapu init`) revokes the previous one, but the still-valid previous
+  token's grants are carried over into the new token (each expansion is
+  approved in the browser), so other initialized folders on the *same
+  machine* keep working. Other machines still need `itapu init` again.
+- When the current token already covers the selected project/environment,
+  `itapu init` skips the browser approval and only (re)writes `.itapu.json`.
 - `itapu run` selects the project from `.itapu.json` automatically; when
   several are configured, it matches the current directory name or takes
   `--project=<name|id>`.

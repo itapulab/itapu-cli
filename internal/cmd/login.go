@@ -68,6 +68,7 @@ func Login(args []string) error {
 			// invalid on the new one; drop it so `run` asks for `init` again.
 			cfg.SecretsToken = ""
 			cfg.SecretsTokenExpiresAt = time.Time{}
+			cfg.SecretsTokenGrants = nil
 		}
 		cfg.BaseURL = baseURL
 		cfg.AccountToken = approved.AccountToken

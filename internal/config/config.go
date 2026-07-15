@@ -21,11 +21,24 @@ const DefaultBaseURL = "https://itapu.vercel.app"
 // ---- user-level store ----
 
 type UserConfig struct {
-	BaseURL               string    `json:"baseUrl,omitempty"`
-	AccountToken          string    `json:"accountToken,omitempty"`
-	AccountTokenExpiresAt time.Time `json:"accountTokenExpiresAt,omitempty"`
-	SecretsToken          string    `json:"secretsToken,omitempty"`
-	SecretsTokenExpiresAt time.Time `json:"secretsTokenExpiresAt,omitempty"`
+	BaseURL               string       `json:"baseUrl,omitempty"`
+	AccountToken          string       `json:"accountToken,omitempty"`
+	AccountTokenExpiresAt time.Time    `json:"accountTokenExpiresAt,omitempty"`
+	SecretsToken          string       `json:"secretsToken,omitempty"`
+	SecretsTokenExpiresAt time.Time    `json:"secretsTokenExpiresAt,omitempty"`
+	SecretsTokenGrants    []TokenGrant `json:"secretsTokenGrants,omitempty"`
+}
+
+// TokenGrant records one project/environment covered by the stored secrets
+// token, so `itapu init` can skip the browser approval when the requested
+// grant is already held. Grant names/ids are not secrets.
+type TokenGrant struct {
+	OrgID           string `json:"orgId"`
+	ProjectID       string `json:"projectId"`
+	ProjectName     string `json:"projectName"`
+	EnvironmentID   string `json:"environmentId"`
+	EnvironmentSlug string `json:"environmentSlug"`
+	EnvironmentName string `json:"environmentName"`
 }
 
 func userConfigPath() (string, error) {

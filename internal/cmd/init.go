@@ -15,11 +15,13 @@ import (
 	"github.com/itapulab/itapu-cli/internal/ui"
 )
 
-// Init implements `itapu init [--env=<slug>]`: scopes the CLI to one org,
-// one or more projects and a single environment, and stores an 8-hour
-// secrets token in the user-level config (the token never touches
-// .itapu.json, which is per-developer state and gets gitignored
-// automatically).
+// Init implements `itapu init [--env=<slug>]`: links this folder to one
+// project and a single environment. The browser approval mints an 8-hour
+// secrets token; a still-valid previous token is sent along so the server
+// carries its grants into the new one (and revokes it), meaning initing
+// project B never breaks a folder linked to project A. When the current
+// token already covers the requested grant, no approval is needed and only
+// .itapu.json is (re)written.
 func Init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	envSlug := fs.String("env", "dev", "environment slug (never prompted)")
@@ -87,26 +89,47 @@ func Init(args []string) error {
 		return fmt.Errorf("no project in %s has a %q environment you can read", org.Name, *envSlug)
 	}
 
-	var picks []int
+	// Pick one project (skip the prompt when there is only one).
+	pick := 0
 	if len(qualifying) == 1 {
 		info("Project: %s", ui.Strong(qualifying[0].Name))
-		picks = []int{0}
 	} else {
 		labels := make([]string, len(qualifying))
 		for i, p := range qualifying {
 			labels[i] = p.Name
 		}
-		picks, err = prompt.MultiSelect(fmt.Sprintf("Select projects (environment: %s):", *envSlug), labels)
+		pick, err = prompt.Select(fmt.Sprintf("Select a project (environment: %s):", *envSlug), labels)
 		if err != nil {
 			return err
 		}
 	}
-	projectIDs := make([]string, len(picks))
-	for i, idx := range picks {
-		projectIDs[i] = qualifying[idx].ID
+	project := &qualifying[pick]
+
+	// Already granted? Then the browser step would approve nothing new:
+	// just link this folder to the existing token.
+	if hasValidSecretsToken(cfg) {
+		for _, g := range cfg.SecretsTokenGrants {
+			if g.OrgID == org.ID && g.ProjectID == project.ID && g.EnvironmentSlug == *envSlug {
+				info("\n" + ui.Success("Your current secrets token already covers this project — no approval needed."))
+				if _, err := linkProject(org.ID, *envSlug, g); err != nil {
+					return err
+				}
+				info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s.",
+					cfg.SecretsTokenExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))))
+				info("Run " + ui.Strong("itapu run -- <command>") + " to start your app with secrets injected.")
+				return nil
+			}
+		}
 	}
 
-	req, err := client.CreateAuthRequest(org.ID, projectIDs, *envSlug)
+	// A still-valid token is sent along so its grants carry over into the
+	// new token; an expired one is not worth extending.
+	extendToken := ""
+	if hasValidSecretsToken(cfg) {
+		extendToken = cfg.SecretsToken
+	}
+
+	req, err := client.CreateAuthRequest(org.ID, project.ID, *envSlug, extendToken)
 	if err != nil {
 		return describeAuthRequestError(err, *envSlug)
 	}
@@ -137,48 +160,58 @@ func Init(args []string) error {
 
 	switch status {
 	case "approved":
-		// Token goes to the user-level store only.
+		// Token and its full grant list go to the user-level store only.
+		grants := make([]config.TokenGrant, len(approved.Grants))
+		for i, g := range approved.Grants {
+			orgID := g.OrgID
+			if orgID == "" {
+				orgID = org.ID
+			}
+			grants[i] = config.TokenGrant{
+				OrgID:           orgID,
+				ProjectID:       g.ProjectID,
+				ProjectName:     g.ProjectName,
+				EnvironmentID:   g.EnvironmentID,
+				EnvironmentSlug: g.EnvironmentSlug,
+				EnvironmentName: g.EnvironmentName,
+			}
+		}
 		cfg.SecretsToken = approved.SecretsToken
 		cfg.SecretsTokenExpiresAt = approved.ExpiresAt
+		cfg.SecretsTokenGrants = grants
 		if err := config.SaveUser(cfg); err != nil {
 			return fmt.Errorf("authorized, but failed to save the secrets token: %w", err)
 		}
 
-		// .itapu.json holds only ids/names (no tokens), but each init
-		// rewrites it with this developer's selection, so it stays
-		// per-developer and out of git.
-		proj := &config.ProjectConfig{OrgID: org.ID, EnvironmentSlug: *envSlug}
-		for _, g := range approved.Grants {
-			proj.Projects = append(proj.Projects, config.ProjectGrant{
-				ProjectID:       g.ProjectID,
-				ProjectName:     g.ProjectName,
-				EnvironmentID:   g.EnvironmentID,
-				EnvironmentName: g.EnvironmentName,
-			})
+		var linked *config.TokenGrant
+		for i := range grants {
+			if grants[i].ProjectID == project.ID && grants[i].EnvironmentSlug == *envSlug {
+				linked = &grants[i]
+				break
+			}
 		}
-		cwd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		path, err := config.SaveProject(cwd, proj)
-		if err != nil {
-			return err
+		if linked == nil {
+			return fmt.Errorf("the approved token does not cover %s (%q) — run `itapu init` again", project.Name, *envSlug)
 		}
 
-		info("\n" + ui.Success("Authorized. Wrote "+path))
-		for _, g := range approved.Grants {
-			info(ui.Grant(g.ProjectName, fmt.Sprintf("%s (%s)", g.EnvironmentName, g.EnvironmentSlug)))
+		info("\n" + ui.Success("Authorized."))
+		if len(grants) > 1 {
+			info("Your secrets token now covers:")
+			for _, g := range grants {
+				info(ui.Grant(g.ProjectName, fmt.Sprintf("%s (%s)", g.EnvironmentName, g.EnvironmentSlug)))
+			}
 		}
-		switch added, err := ensureGitignored(cwd); {
-		case err != nil:
-			info(ui.Warn(fmt.Sprintf("Couldn't update .gitignore (%v) — add %s to it yourself; the file is per-developer.",
-				err, config.ProjectConfigName)))
-		case added:
-			info("Added " + ui.Strong(config.ProjectConfigName) + " to .gitignore " + ui.Faint("(per-developer file)"))
+		if _, err := linkProject(org.ID, *envSlug, *linked); err != nil {
+			return err
 		}
-		info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s. Note: this revoked any previous",
-			approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04"))))
-		info(ui.Faint("secrets token of yours (other repos may need `itapu init` again)."))
+		expiry := approved.ExpiresAt.Local().Format("Mon, 02 Jan 2006 15:04")
+		if extendToken != "" {
+			info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s. It replaced your previous token,", expiry)))
+			info(ui.Faint("carrying its grants over — folders linked to them keep working."))
+		} else {
+			info("\n" + ui.Faint(fmt.Sprintf("Secrets token valid until %s. Note: this revoked any previous", expiry)))
+			info(ui.Faint("secrets token of yours."))
+		}
 		info("Run " + ui.Strong("itapu run -- <command>") + " to start your app with secrets injected.")
 		return nil
 	case "denied":
@@ -188,6 +221,47 @@ func Init(args []string) error {
 	default:
 		return fmt.Errorf("unexpected status %q", status)
 	}
+}
+
+// hasValidSecretsToken reports whether the stored secrets token exists and
+// has not expired.
+func hasValidSecretsToken(cfg *config.UserConfig) bool {
+	return cfg.SecretsToken != "" &&
+		(cfg.SecretsTokenExpiresAt.IsZero() || time.Now().Before(cfg.SecretsTokenExpiresAt))
+}
+
+// linkProject writes .itapu.json in the current directory pointing at the
+// grant (ids/names only, no tokens; per-developer, hence gitignored) and
+// reports both to the user.
+func linkProject(orgID, envSlug string, g config.TokenGrant) (string, error) {
+	proj := &config.ProjectConfig{
+		OrgID:           orgID,
+		EnvironmentSlug: envSlug,
+		Projects: []config.ProjectGrant{{
+			ProjectID:       g.ProjectID,
+			ProjectName:     g.ProjectName,
+			EnvironmentID:   g.EnvironmentID,
+			EnvironmentName: g.EnvironmentName,
+		}},
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	path, err := config.SaveProject(cwd, proj)
+	if err != nil {
+		return "", err
+	}
+	info(ui.Success("Wrote " + path))
+	info(ui.Grant(g.ProjectName, fmt.Sprintf("%s (%s)", g.EnvironmentName, g.EnvironmentSlug)))
+	switch added, err := ensureGitignored(cwd); {
+	case err != nil:
+		info(ui.Warn(fmt.Sprintf("Couldn't update .gitignore (%v) — add %s to it yourself; the file is per-developer.",
+			err, config.ProjectConfigName)))
+	case added:
+		info("Added " + ui.Strong(config.ProjectConfigName) + " to .gitignore " + ui.Faint("(per-developer file)"))
+	}
+	return path, nil
 }
 
 // describeAuthRequestError turns auth-request conflicts into actionable
