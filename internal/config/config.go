@@ -120,6 +120,24 @@ type ProjectConfig struct {
 	Projects        []ProjectGrant `json:"projects"`
 }
 
+// LoadProjectDir reads .itapu.json from dir itself (no parent walk, unlike
+// FindProject). Returns (nil, nil) when the file does not exist.
+func LoadProjectDir(dir string) (*ProjectConfig, error) {
+	path := filepath.Join(dir, ProjectConfigName)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var cfg ProjectConfig
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("corrupt %s: %w", path, err)
+	}
+	return &cfg, nil
+}
+
 // FindProject walks up from dir looking for .itapu.json, like git does.
 func FindProject(dir string) (*ProjectConfig, string, error) {
 	dir, err := filepath.Abs(dir)

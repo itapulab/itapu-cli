@@ -22,6 +22,11 @@ import (
 // project B never breaks a folder linked to project A. When the current
 // token already covers the requested grant, no approval is needed and only
 // .itapu.json is (re)written.
+//
+// When the folder already has a .itapu.json, its org/project pin is reused
+// and the selection prompts are skipped (e.g. re-initing after the token
+// expired); the prompts return if the pin no longer matches what the user
+// can access, or if the file lists several projects.
 func Init(args []string) error {
 	fs := flag.NewFlagSet("init", flag.ContinueOnError)
 	envSlug := fs.String("env", "dev", "environment slug (never prompted)")
@@ -47,9 +52,41 @@ func Init(args []string) error {
 		return errors.New("you don't belong to any organization yet — create one in the Itapu dashboard")
 	}
 
-	// Pick the organization (skip the prompt when there is only one).
-	org := &ws.Organizations[0]
-	if len(ws.Organizations) > 1 {
+	// A .itapu.json already in this folder pins the org/project; a corrupt
+	// file only costs the shortcut, since init rewrites it anyway.
+	cwd, err := os.Getwd()
+	if err != nil {
+		return err
+	}
+	pinned, err := config.LoadProjectDir(cwd)
+	if err != nil {
+		info(ui.Warn(fmt.Sprintf("Ignoring existing %s: %v", config.ProjectConfigName, err)))
+		pinned = nil
+	}
+
+	// Pick the organization: the pinned one when still accessible, otherwise
+	// prompt (skipping the prompt when there is only one).
+	var org *api.Organization
+	if pinned != nil {
+		for i := range ws.Organizations {
+			if ws.Organizations[i].ID == pinned.OrgID {
+				org = &ws.Organizations[i]
+				break
+			}
+		}
+		if org == nil {
+			info(ui.Warn(fmt.Sprintf("The organization pinned in %s is not one you belong to — pick again.",
+				config.ProjectConfigName)))
+		} else {
+			info("Organization: %s %s", ui.Strong(org.Name),
+				ui.Faint("("+org.Role+", from "+config.ProjectConfigName+")"))
+		}
+	}
+	if org == nil && len(ws.Organizations) == 1 {
+		org = &ws.Organizations[0]
+		info("Organization: %s %s", ui.Strong(org.Name), ui.Faint("("+org.Role+")"))
+	}
+	if org == nil {
 		labels := make([]string, len(ws.Organizations))
 		for i, o := range ws.Organizations {
 			labels[i] = fmt.Sprintf("%s (%s)", o.Name, o.Role)
@@ -59,8 +96,6 @@ func Init(args []string) error {
 			return err
 		}
 		org = &ws.Organizations[idx]
-	} else {
-		info("Organization: %s %s", ui.Strong(org.Name), ui.Faint("("+org.Role+")"))
 	}
 
 	// A project qualifies when it has the resolved environment slug (the
@@ -89,11 +124,32 @@ func Init(args []string) error {
 		return fmt.Errorf("no project in %s has a %q environment you can read", org.Name, *envSlug)
 	}
 
-	// Pick one project (skip the prompt when there is only one).
-	pick := 0
-	if len(qualifying) == 1 {
+	// Pick one project: the pinned one when it still qualifies, otherwise
+	// prompt (skipping the prompt when there is only one). A multi-project
+	// .itapu.json never auto-picks — init links a single project, and
+	// silently narrowing the file down to one would break `itapu run` for
+	// the others.
+	pick := -1
+	if pinned != nil && pinned.OrgID == org.ID && len(pinned.Projects) == 1 {
+		for i := range qualifying {
+			if qualifying[i].ID == pinned.Projects[0].ProjectID {
+				pick = i
+				break
+			}
+		}
+		if pick >= 0 {
+			info("Project: %s %s", ui.Strong(qualifying[pick].Name),
+				ui.Faint("(from "+config.ProjectConfigName+")"))
+		} else {
+			info(ui.Warn(fmt.Sprintf("The project pinned in %s has no %q environment you can read — pick again.",
+				config.ProjectConfigName, *envSlug)))
+		}
+	}
+	if pick < 0 && len(qualifying) == 1 {
+		pick = 0
 		info("Project: %s", ui.Strong(qualifying[0].Name))
-	} else {
+	}
+	if pick < 0 {
 		labels := make([]string, len(qualifying))
 		for i, p := range qualifying {
 			labels[i] = p.Name

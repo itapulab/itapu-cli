@@ -100,6 +100,11 @@ Notes from the API contract:
   machine* keep working. Other machines still need `itapu init` again.
 - When the current token already covers the selected project/environment,
   `itapu init` skips the browser approval and only (re)writes `.itapu.json`.
+- When the folder already has a `.itapu.json`, `itapu init` reuses its
+  pinned org/project and skips both selection prompts (handy when
+  re-initing after token expiry). The prompts come back if the pin no
+  longer matches something you can access, or if the file lists several
+  projects.
 - `itapu run` selects the project from `.itapu.json` automatically; when
   several are configured, it matches the current directory name or takes
   `--project=<name|id>`.
