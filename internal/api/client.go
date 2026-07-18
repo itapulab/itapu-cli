@@ -228,6 +228,9 @@ func (c *Client) AuthRequestPoll(requestCode string) (*AuthRequestPollResponse, 
 type Secret struct {
 	Key   string `json:"key"`
 	Value string `json:"value"`
+	// Private secrets belong to the token's user only; the server never
+	// returns other users' private secrets.
+	Private bool `json:"private,omitempty"`
 }
 
 type SecretsResponse struct {

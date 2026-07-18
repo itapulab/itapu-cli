@@ -87,8 +87,18 @@ func Run(args []string) (int, error) {
 		return 1, err
 	}
 
-	info(ui.Faint(fmt.Sprintf("itapu: injecting %d secrets from %s/%s (%s)",
-		len(resp.Secrets), resp.Environment.ProjectName, resp.Environment.Slug, resp.Environment.Name)))
+	privateCount := 0
+	for _, s := range resp.Secrets {
+		if s.Private {
+			privateCount++
+		}
+	}
+	detail := ""
+	if privateCount > 0 {
+		detail = fmt.Sprintf(" (%d private)", privateCount)
+	}
+	info(ui.Faint(fmt.Sprintf("itapu: injecting %d secrets%s from %s/%s (%s)",
+		len(resp.Secrets), detail, resp.Environment.ProjectName, resp.Environment.Slug, resp.Environment.Name)))
 
 	return spawn(childArgs, resp.Secrets)
 }
